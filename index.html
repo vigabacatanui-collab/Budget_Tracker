@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budget Tracker</title>
+    <meta name="theme-color" content="#4CAF50">
+    <link rel="apple-touch-icon" href="/icon192.png">
+    <link rel="icon" type="image/png" href="/icon192.png">
+    <link rel="manifest" href="/manifest.json">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #81bbf59c;
+            margin: 0;
+            padding: 20px;
+            color: #0e0e0e;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .box {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 20px;
+            flex: 1 1 300px;
+        }
+
+        h3 {
+            margin-top: 0;
+        }
+
+        input,
+        select,
+        button {
+            width: 100%;
+            padding: 8px;
+            margin: 6px 0;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+        }
+
+        button {
+            background: #2c3e50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1a252f;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+
+        th {
+            background: #f0f0f0;
+        }
+
+        .action-btns {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+        }
+
+        .action-btns button {
+            width: auto;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        .delete-btn {
+            background: #c0392b;
+        }
+
+        .delete-btn:hover {
+            background: #922b21;
+        }
+
+        .total {
+            margin-top: 10px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>💰 Budget Tracker </h2>
+
+    <div class="wrap">
+
+        <div class="box">
+            <h3>Add Transaction</h3>
+            <input type="text" id="item" placeholder="Item/Description">
+            <input type="number" id="amount" placeholder="Amount">
+            <select id="type">
+                <option value="income">Income</option>
+                <option value="expense">Expense</option>
+            </select>
+            <button onclick="add()">Add</button>
+        </div>
+
+        <div class="box">
+            <h3>History</h3>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Amount</th>
+                            <th>Type</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tb"></tbody>
+                </table>
+            </div>
+            <div class="total" id="totalDisplay">Total: 0</div>
+            <button style="margin-top:10px;" onclick="clr()">Clear All</button>
+        </div>
+
+    </div>
+
+    <script>
+
+        const supabaseUrl = 'https://esyzjkihsgogxdogfmva.supabase.co';
+        const supabaseKey = 'sb_publishable_PxVju2KX_rC_iYCz6nidkg_lDyrHlRh';
+
+        const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        const itemInput = document.getElementById('item');
+        const amountInput = document.getElementById('amount');
+        const typeSelect = document.getElementById('type');
+        const budgetTable = document.getElementById('tb');
+        const totalDisplay = document.getElementById('totalDisplay');
+
+        async function add() {
+            const item = itemInput.value.trim();
+            const amount = parseFloat(amountInput.value);
+            const type = typeSelect.value;
+
+            if (!item || isNaN(amount)) {
+                alert("Please fill all fields correctly");
+                return;
+            }
+
+            const { error } = await supabaseClient
+                .from('Budget_Tracker1')
+                .insert([{ item, amount, type, created_at: new Date().toISOString() }]);
+
+            if (error) {
+                console.log(error);
+                alert("Error saving data");
+                return;
+            }
+
+            itemInput.value = '';
+            amountInput.value = '';
+            show();
+        }
+
+        async function show() {
+            const { data, error } = await supabaseClient
+                .from('Budget_Tracker1')
+                .select('*')
+                .order('created_at', { ascending: true });
+
+            if (error) {
+                console.log(error);
+                return;
+            }
+
+            budgetTable.innerHTML = '';
+            let total = 0;
+
+            if (data && data.length) {
+                data.forEach(i => {
+                    budgetTable.innerHTML += `
+                <tr>
+                    <td>${i.item}</td>
+                    <td>${i.amount}</td>
+                    <td>${i.type}</td>
+                    <td>
+                        <div class="action-btns">
+                            <button onclick="edt('${i.id}')">Edit</button>
+                            <button class="delete-btn" onclick="del('${i.id}')">delete</button>
+                        </div>
+                    </td>
+                </tr>`;
+                    total += i.type === 'income' ? i.amount : -i.amount;
+                });
+            }
+
+            totalDisplay.innerText = `Total: ${total}`;
+        }
+
+        async function edt(id) {
+            let newItem = prompt("New item/description:");
+            let newAmount = parseFloat(prompt("New amount:"));
+            let newType = prompt("Type: income or expense:");
+
+            if (!newItem || isNaN(newAmount) || !newType) return;
+
+            const { error } = await supabaseClient
+                .from('Budget_Tracker1')
+                .update({ item: newItem, amount: newAmount, type: newType })
+                .eq('id', id);
+
+            if (error) {
+                console.log(error);
+                alert("Error updating data");
+                return;
+            }
+
+            show();
+        }
+
+        async function del(id) {
+            const { error } = await supabaseClient
+                .from('Budget_Tracker1')
+                .delete()
+                .eq('id', id);
+
+            if (error) {
+                console.log(error);
+                alert("Error deleting data");
+                return;
+            }
+
+            show();
+        }
+
+        async function clr() {
+            if (!confirm("Clear all transactions?")) return;
+
+            const { error } = await supabaseClient
+                .from('Budget_Tracker1')
+                .delete()
+                .neq('id', 0);
+
+            if (error) {
+                console.log(error);
+                alert("Error clearing data");
+                return;
+            }
+
+            show();
+        }
+
+        show();
+
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker
+                .register("service-worker.js")
+                .then(() => {
+                    console.log("ayos! rehistro as service worker");
+                })
+                .catch((error) => {
+                    console.log("Registration failed: ", error);
+                });
+        }
+
+        async function testConnection() {
+
+            const { data, error } = await supabaseClient
+                .from('Budget_Tracker1')
+                .select('*')
+
+            console.log("DATA:", data)
+            console.log("ERROR:", error)
+
+        }
+
+        testConnection()
+
+    </script>
+
+
+</body>
+
+</html>
